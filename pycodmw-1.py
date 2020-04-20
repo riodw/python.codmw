@@ -10,6 +10,7 @@ from grabscreen import grab_screen
 from getkeys import key_check
 
 # \Users\riodw\projects\python.codmw
+# https://www.youtube.com/watch?v=wIxUp-37jVY&list=PLQVvvaa0QuDeETZEOy4VdocT7TOjfSA8a&index=10
 
 def keys_to_output(keys):
     # [A, W, D]
@@ -25,9 +26,9 @@ def keys_to_output(keys):
 
 file_name = 'training_data.npy'
 
-if False and os.path.isfile(file_name):
+if os.path.isfile(file_name):
     print('File exists, loading previous data')
-    training_data = list(np.load(file_name))
+    training_data = list(np.load(file_name, allow_pickle=True))
 else:
     print('File does not exist, starting fresh')
     training_data = []
@@ -57,15 +58,15 @@ def main():
             # convert to gray scale
             screen = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
             # resize to smaller screen
-            cv2.imshow('window2', screen)
             screen = cv2.resize(screen, (96, 58))
             # screen preview
+            # cv2.imshow('window2', screen)
             # output
             output = keys_to_output(keys)
             training_data.append([screen, output])
 
 
-            print('Frame took {} seconds'.format(time.time()-last_time))
+            # print('Frame took {} seconds'.format(time.time()-last_time))
 
             if len(training_data) % 500 == 0:
                 print(len(training_data))
@@ -81,8 +82,8 @@ def main():
                 paused = True
                 time.sleep(1)
 
-        if cv2.waitKey(25) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
-            break
+        # if cv2.waitKey(25) & 0xFF == ord('q'):
+        #     cv2.destroyAllWindows()
+        #     break
 
 main()
