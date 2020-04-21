@@ -31,4 +31,4 @@ model.save(MODEL_NAME)
 
 
 
-# tensorboard --logdir=foo:C:/Users/riodw/projects/python.codmw/log
+# py -m tensorboard.main --logdir=/Users/riodw/projects/python.codmw/log

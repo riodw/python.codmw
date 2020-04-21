@@ -51,26 +51,25 @@ def main():
         keys = key_check()
 
         if not paused:
-            # 800x600 windowed mode for Call of Duty Modern Warzone, at the top left position of main screen.
+            # 962 windowed mode for Call of Duty Modern Warzone, at the top left position of main screen.
             # 40 px accounts for title bar. 
-            # screen =  np.array(ImageGrab.grab(bbox=(0, 40, 800, 530)))
             screen =  grab_screen(region=(0, 40, 962, 579))
             # convert to gray scale
             screen = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
             # resize to smaller screen
             screen = cv2.resize(screen, (96, 58))
             # screen preview
-            # cv2.imshow('window2', screen)
+            cv2.imshow('window2', screen)
             # output
-            output = keys_to_output(keys)
-            training_data.append([screen, output])
+            # output = keys_to_output(keys)
+            # training_data.append([screen, output])
 
 
-            # print('Frame took {} seconds'.format(time.time()-last_time))
+            print('Frame took {} seconds'.format(time.time()-last_time))
 
-            if len(training_data) % 500 == 0:
-                print(len(training_data))
-                np.save(file_name, training_data)
+            # if len(training_data) % 500 == 0:
+            #     print(len(training_data))
+            #     np.save(file_name, training_data)
         
         last_time = time.time()
 
@@ -82,8 +81,8 @@ def main():
                 paused = True
                 time.sleep(1)
 
-        # if cv2.waitKey(25) & 0xFF == ord('q'):
-        #     cv2.destroyAllWindows()
-        #     break
+        if cv2.waitKey(25) & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
+            break
 
 main()
