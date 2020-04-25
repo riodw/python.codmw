@@ -10,7 +10,8 @@ from grabscreen import grab_screen
 from getkeys import key_check
 
 # \Users\riodw\projects\python.codmw
-# https://www.youtube.com/watch?v=I1qT-VbA_MM&list=PLQVvvaa0QuDeETZEOy4VdocT7TOjfSA8a&index=11
+# https://github.com/sentdex/pygta5
+# https://www.youtube.com/watch?v=UAXulqzn5Ps&list=PLQVvvaa0QuDeETZEOy4VdocT7TOjfSA8a&index=19
 
 def keys_to_output(keys):
     # [A, W, D]
