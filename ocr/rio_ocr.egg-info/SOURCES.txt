@@ -1,0 +1,11 @@
+README.md
+setup.py
+datasets/__init__.py
+datasets/fsns.py
+datasets/fsns_test.py
+datasets/unittest_utils.py
+datasets/unittest_utils_test.py
+rio_ocr.egg-info/PKG-INFO
+rio_ocr.egg-info/SOURCES.txt
+rio_ocr.egg-info/dependency_links.txt
+rio_ocr.egg-info/top_level.txt

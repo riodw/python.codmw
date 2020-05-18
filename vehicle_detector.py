@@ -15,17 +15,27 @@ import sys
 import tarfile
 import time
 from collections import defaultdict
-
+import string
 
 # Installed
 import cv2
 import tensorflow as tf
+from tensorflow.python.training import monitored_session
+from tensorflow.python.platform import flags
+from tensorflow.python.training import monitored_session
 import numpy as np
 
 # Project
 from grabscreen import grab_screen
 import keys as k
 from getkeys import key_check
+
+# ocr
+from ocr import (
+    common_flags,
+    datasets,
+    data_provider,
+)
 
 # ## Object detection imports
 # Here are the imports from the object detection module.
@@ -35,6 +45,13 @@ from utils import visualization_utils as vis_util
 
 # This is needed since the notebook is stored in the object_detection folder.
 sys.path.append("..")
+
+# for ocr
+common_flags.define()
+# "http://download.tensorflow.org/models/attention_ocr_2017_08_09.tar.gz"
+tf.flags.FLAGS.dataset_dir = os.path.join(
+    os.path.dirname(__file__), "ocr/datasets/testdata/fsns"
+)
 
 keys = k.Keys({})
 
@@ -82,9 +99,11 @@ categories = label_map_util.convert_label_map_to_categories(
 category_index = label_map_util.create_category_index(categories)
 
 # Pause options
-paused = False
-pause_control = True
 debug = False
+paused = False
+pause_fire = True
+pause_control = False
+firin_mah_lazor = False
 
 last_ran = time.time()
 
@@ -130,151 +149,248 @@ def load_image_into_numpy_array(image):
 # Size, in inches, of the output images.
 IMAGE_SIZE = (12, 8)
 
+"""
+OCR SETUP
+"""
+batch_size = 1
+checkpoint = "ocr/model.ckpt-399731"
+dataset_name = "fsns"
+width = 600
+height = 150
+# get img
+img = cv2.imread("./cod_img.png")
+printable = set(string.printable)
+
+
+# LOAD
+dataset = common_flags.create_dataset(split_name=flags.FLAGS.split_name)
+model = common_flags.create_model(
+    num_char_classes=dataset.num_char_classes,
+    seq_length=dataset.max_sequence_length,
+    num_views=dataset.num_of_views,
+    null_code=dataset.null_code,
+    charset=dataset.charset,
+)
+raw_images = tf.placeholder(tf.uint8, shape=[batch_size, height, width, 3])
+images = tf.map_fn(data_provider.preprocess_image, raw_images, dtype=tf.float32)
+endpoints = model.create_base(images, labels_one_hot=None)
+
+images_data = np.ndarray(shape=(batch_size, height, width, 3), dtype="uint8")
+
+session_creator = monitored_session.ChiefSessionCreator(
+    checkpoint_filename_with_path=checkpoint
+)
+
+ocr_sess = monitored_session.MonitoredSession(session_creator=session_creator)
+
+
+"""
+MAIN RUN
+"""
+
 with detection_graph.as_default():
-    with tf.Session(graph=detection_graph) as sess:
+    od_sess = tf.Session(graph=detection_graph)
 
-        # for i in list(range(4))[::-1]:
-        # print(i + 1)
-        # time.sleep(1)
+    # for i in list(range(4))[::-1]:
+    # print(i + 1)
+    # time.sleep(1)
 
-        while True:
+    image_tensor2 = detection_graph.get_tensor_by_name("image_tensor:0")
+    # Each box represents a part of the image where a particular object was detected.
+    boxes2 = detection_graph.get_tensor_by_name("detection_boxes:0")
+    # Each score represent how level of confidence for each of the objects.
+    # Score is shown on the result image, together with the class label.
+    scores2 = detection_graph.get_tensor_by_name("detection_scores:0")
+    classes2 = detection_graph.get_tensor_by_name("detection_classes:0")
+    num_detections2 = detection_graph.get_tensor_by_name("num_detections:0")
 
-            # screen = cv2.resize(grab_screen(region=(0,40,1280,745)), (WIDTH,HEIGHT))
-            screen = cv2.resize(grab_screen(region=(0, 40, 1280, 745)), (800, 450))
-            image_np = cv2.cvtColor(screen, cv2.COLOR_BGR2RGB)
-            # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
-            image_np_expanded = np.expand_dims(image_np, axis=0)
-            image_tensor = detection_graph.get_tensor_by_name("image_tensor:0")
-            # Each box represents a part of the image where a particular object was detected.
-            boxes = detection_graph.get_tensor_by_name("detection_boxes:0")
-            # Each score represent how level of confidence for each of the objects.
-            # Score is shown on the result image, together with the class label.
-            scores = detection_graph.get_tensor_by_name("detection_scores:0")
-            classes = detection_graph.get_tensor_by_name("detection_classes:0")
-            num_detections = detection_graph.get_tensor_by_name("num_detections:0")
-            # Actual detection.
-            (boxes, scores, classes, num_detections) = sess.run(
-                [boxes, scores, classes, num_detections],
-                feed_dict={image_tensor: image_np_expanded},
-            )
-            # Visualization of the results of a detection.
-            vis_util.visualize_boxes_and_labels_on_image_array(
-                image_np,
-                np.squeeze(boxes),
-                np.squeeze(classes).astype(np.int32),
-                np.squeeze(scores),
-                category_index,
-                use_normalized_coordinates=True,
-                line_thickness=8,
-            )
+    while True:
+        # Get screen img
+        # screen = cv2.resize(grab_screen(region=(0,40,1280,745)), (WIDTH,HEIGHT))
+        screen_cap = grab_screen(region=(0, 40, 1280, 745))
+        screen_cap = cv2.cvtColor(screen_cap, cv2.COLOR_BGR2RGB)
+        image_np = cv2.resize(screen_cap, (800, 450))
+        # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
+        image_np_expanded = np.expand_dims(image_np, axis=0)
 
-            if not paused:
+        """
+            Optical Character Recognition
+            """
+        # # get a 60 x 60 img of the word "CUSTOM"
+        # img_crop = screen_cap[60:130, 100:170]  # img[y:y+h, x:x+w]
+        # # resize imge to 150 x 150
+        # img_crop_resize = cv2.resize(img_crop, (150, 150))
+        # # 600 x 150
+        # img_crop_resize_x4 = np.concatenate(
+        #     (img_crop_resize, img_crop_resize, img_crop_resize, img_crop_resize),
+        #     axis=1,
+        # )
+        # cv2.imshow("custom", img_crop_resize_x4)
+        # # cv2.waitKey()
 
-                # Store found vehicals
-                vehicle_dict = {}
-                # FIND OBJECTS
-                for i, b in enumerate(boxes[0]):
-                    # https://github.com/tensorflow/models/blob/master/research/object_detection/data/mscoco_label_map.pbtxt
+        # images_data[0] = np.asarray(img_crop_resize_x4)
 
-                    if (
-                        # person
-                        classes[0][i]
-                        == 1
-                        # car
-                        # classes[0][i] == 3
-                        # bus
-                        # or classes[0][i] == 6
-                        # truck
-                        # or classes[0][i] == 8
-                    ):
+        # predictions = ocr_sess.run(
+        #     endpoints.predicted_text, feed_dict={raw_images: images_data},
+        # )
 
-                        if scores[0][i] > 0.5:
-                            # print("Found: More than 50% confidant")
-                            # More than 50% confidant
-                            mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
-                            mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
-                            apx_distance = round(
-                                (1 - (boxes[0][i][3] - boxes[0][i][1])) ** 4, 1
-                            )
+        # # print("\n")
+        # text = "".join(filter(lambda x: x in printable, predictions[0].decode("utf-8")))
+        # if text == "Custom":
+        #     # keys.directMouse(loc_x, loc_y)
+        #     print(
+        #         "".join(
+        #             filter(lambda x: x in printable, predictions[0].decode("utf-8"))
+        #         )
+        #     )
 
-                            # Add found vehicals
-                            vehicle_dict[apx_distance] = [mid_x, mid_y, scores[0][i]]
+        """
+            Object Detection 
+            """
 
-                            # label found objects
-                            cv2.putText(
-                                image_np,
-                                "{}".format(apx_distance),
-                                (int(mid_x * 800), int(mid_y * 450)),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.7,
-                                (255, 255, 255),
-                                2,
-                            )
-                            # if apx_distance <= 0.5:
-                            #     if mid_x > 0.3 and mid_x < 0.7:
-                            #         cv2.putText(
-                            #             image_np,
-                            #             "ENEMY!!!",
-                            #             (int(mid_x * 800), int(mid_y * 450)),
-                            #             cv2.FONT_HERSHEY_SIMPLEX,
-                            #             1.0,
-                            #             (0, 0, 255),
-                            #             3,
-                            #         )
+        # Actual detection.
+        (boxes, scores, classes, num_detections) = od_sess.run(
+            [boxes2, scores2, classes2, num_detections2],
+            feed_dict={image_tensor2: image_np_expanded},
+        )
+        # Visualization of the results of a detection.
+        vis_util.visualize_boxes_and_labels_on_image_array(
+            image_np,
+            np.squeeze(boxes),
+            np.squeeze(classes).astype(np.int32),
+            np.squeeze(scores),
+            category_index,
+            use_normalized_coordinates=True,
+            line_thickness=8,
+        )
 
-                    # center on it
-                    if len(vehicle_dict) > 0:
-                        # Center Target
-                        closest = sorted(vehicle_dict.keys())[0]
-                        vehicle_choice = vehicle_dict[closest]
-                        determine_movement(
-                            mid_x=vehicle_choice[0], mid_y=vehicle_choice[1]
+        if not paused:
+
+            # Store found vehicals
+            vehicle_dict = {}
+            # FIND OBJECTS
+            for i, b in enumerate(boxes[0]):
+                # https://github.com/tensorflow/models/blob/master/research/object_detection/data/mscoco_label_map.pbtxt
+
+                if (
+                    # person
+                    # classes[0][i] == 1
+                    # car
+                    classes[0][i]
+                    == 3
+                    # bus
+                    # or classes[0][i] == 6
+                    # truck
+                    # or classes[0][i] == 8
+                ):
+
+                    if scores[0][i] > 0.5:
+                        # print("Found: More than 50% confidant")
+                        # More than 50% confidant
+                        mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
+                        mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
+                        apx_distance = round(
+                            (1 - (boxes[0][i][3] - boxes[0][i][1])) ** 4, 1
                         )
 
-                        if not pause_control:
-                            # ADS
-                            keys.directMouse(buttons=keys.mouse_rb_press)
-                            # Fire
+                        # Add found vehicals
+                        vehicle_dict[apx_distance] = [mid_x, mid_y, scores[0][i]]
+
+                        # label found objects
+                        cv2.putText(
+                            image_np,
+                            "{}".format(apx_distance),
+                            (int(mid_x * 800), int(mid_y * 450)),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (255, 255, 255),
+                            2,
+                        )
+                        # if apx_distance <= 0.5:
+                        #     if mid_x > 0.3 and mid_x < 0.7:
+                        #         cv2.putText(
+                        #             image_np,
+                        #             "ENEMY!!!",
+                        #             (int(mid_x * 800), int(mid_y * 450)),
+                        #             cv2.FONT_HERSHEY_SIMPLEX,
+                        #             1.0,
+                        #             (0, 0, 255),
+                        #             3,
+                        #         )
+
+                # center on it
+                if len(vehicle_dict) > 0:
+
+                    # Center Target
+                    closest = sorted(vehicle_dict.keys())[0]
+                    vehicle_choice = vehicle_dict[closest]
+                    determine_movement(mid_x=vehicle_choice[0], mid_y=vehicle_choice[1])
+
+                    if not pause_fire:
+                        # ADS
+                        # keys.directMouse(buttons=keys.mouse_rb_press)
+                        # Fire
+                        if not firin_mah_lazor:
                             keys.directMouse(buttons=keys.mouse_lb_press)
+                            firin_mah_lazor = True
+                            # stop walk
+                            keys.directKey("w", keys.key_release)
 
-                    else:
-                        if not pause_control:
-                            # Stop ADS
-                            keys.directMouse(buttons=keys.mouse_rb_release)
-                            # Stop Fire
-                            keys.directMouse(buttons=keys.mouse_lb_release)
-
-            # SHOW OUTPUT IN WINDOW
-            cv2.imshow("window", image_np)
-            if cv2.waitKey(25) & 0xFF == ord("q"):
-                cv2.destroyAllWindows()
-                break
-
-            # check for manual input
-            input_keys = key_check()
-
-            # t pauses game and can get annoying.
-            if "T" in input_keys:
-                if paused:
-                    paused = False
                 else:
-                    paused = True
 
-                print("PAUSE: T", paused)
+                    if not pause_fire:
+                        # Stop ADS
+                        # keys.directMouse(buttons=keys.mouse_rb_release)
+                        # Stop Fire
+                        keys.directMouse(buttons=keys.mouse_lb_release)
+                        firin_mah_lazor = False
+                        # walk
+                        # keys.directKey("w")
 
+        # SHOW OUTPUT IN WINDOW
+        cv2.imshow("window", image_np)
+        if cv2.waitKey(25) & 0xFF == ord("q"):
+            cv2.destroyAllWindows()
+            break
+
+        # check for manual input
+        input_keys = key_check()
+
+        # t pauses game and can get annoying.
+        if "T" in input_keys:
+            if paused:
+                paused = False
+            else:
                 time.sleep(0.5)
-                keys.directMouse(buttons=keys.mouse_rb_release)
-                keys.directMouse(buttons=keys.mouse_lb_release)
+                paused = True
 
-            # t pauses game and can get annoying.
-            if "Y" in input_keys:
-                if pause_control:
-                    pause_control = False
-                else:
-                    pause_control = True
+            print("PAUSE: T", paused)
 
-                print("PAUSE: Y", pause_control)
+            keys.directMouse(buttons=keys.mouse_rb_release)
+            keys.directMouse(buttons=keys.mouse_lb_release)
 
+        # y pauses game and can get annoying.
+        if "Y" in input_keys:
+            if pause_control:
+                pause_control = False
+            else:
                 time.sleep(0.5)
-                keys.directMouse(buttons=keys.mouse_rb_release)
-                keys.directMouse(buttons=keys.mouse_lb_release)
+                pause_control = True
+
+            print("PAUSE: Y", pause_control)
+
+            keys.directMouse(buttons=keys.mouse_rb_release)
+            keys.directMouse(buttons=keys.mouse_lb_release)
+
+        # y pauses game and can get annoying.
+        if "U" in input_keys:
+            if pause_fire:
+                pause_fire = False
+            else:
+                time.sleep(0.5)
+                pause_fire = True
+
+            print("PAUSE: U", pause_fire)
+
+            keys.directMouse(buttons=keys.mouse_rb_release)
+            keys.directMouse(buttons=keys.mouse_lb_release)
